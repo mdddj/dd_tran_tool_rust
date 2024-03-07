@@ -1,5 +1,10 @@
 # dd_tran_tool_rust
 
+# 安装
+
+```bash
+cargo install dd_tran_tool
+```
 
 # 1.初始化
 
