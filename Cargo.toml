@@ -2,6 +2,14 @@
 name = "dd_tran_tool"
 version = "0.1.0"
 edition = "2021"
+authors = ["hlxsmail@gmail.com"]
+license = "MIT OR Apache-2.0"
+description = "idea 插件开发多语言翻译工具"
+readme = "README.md"
+homepage = "https://github.com/mdddj/dd_tran_tool_rust"
+repository = "https://github.com/mdddj/dd_tran_tool_rust"
+keywords = ["idea", "plugin", "tran", "dd_tran_tool"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
