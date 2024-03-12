@@ -217,7 +217,7 @@ fn write_key_value_to_file(dir: &str, file_name: &str, key: &str, value: &str) {
     match properties_file {
         Ok(_file) => {
             let mut writer = BufWriter::new(_file);
-            let wr = writeln!(writer, "{}={}", key, value);
+            let wr = writeln!(writer, "\n{}={}", key, value);
             match wr {
                 Ok(_) => {}
                 Err(e) => println!("写入翻译结果失败:{},翻译结果:{},", e, value),
