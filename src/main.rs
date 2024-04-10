@@ -25,9 +25,11 @@ pub fn str_to_lang(lang_str: &str) -> Result<Lang, String> {
         "ja" => Ok(Lang::Jp),
         "ko" => Ok(Lang::Kor),
         "fra" => Ok(Lang::Fra),
+        "fr" => Ok(Lang::Fra),
         "spa" => Ok(Lang::Spa),
         "th" => Ok(Lang::Th),
         "ara" => Ok(Lang::Ara),
+        "ar" => Ok(Lang::Ara),
         "ru" => Ok(Lang::Ru),
         "pt" => Ok(Lang::Pt),
         "de" => Ok(Lang::De),
@@ -46,6 +48,7 @@ pub fn str_to_lang(lang_str: &str) -> Result<Lang, String> {
         "hu" => Ok(Lang::Hu),
         "hk" => Ok(Lang::Cht),
         "vie" => Ok(Lang::Vie),
+
         _ => Err(format!("Unknown language code: {}", lang_str)),
     }
 }

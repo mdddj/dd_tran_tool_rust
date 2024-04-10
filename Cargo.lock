@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "dd_tran_tool"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "baidu_trans",
  "clap 4.5.2",
