@@ -17,13 +17,13 @@ dd_tran_tool init
 
 ```json
     {
-        "baiduId":"",
-        "baiduKey":"",
-        "propertiesFileDir": "./src/main/resources/messages",
+        "baidu_id":"",
+        "baidu_key":"",
+        "properties_file_dir": "./src/main/resources/messages",
         "filename": "pluginBundle",
         "defaultfilename":"pluginBundle",
-        "defaultLang":"zh",
-        "suportLangs":[
+        "default_lang":"zh",
+        "suport_langs":[
             "en",
             "hk",
             "ja",
@@ -31,19 +31,19 @@ dd_tran_tool init
         ]
     }
 ```
-`baiduId`: 百度翻译api id
+`baidu_id`: 百度翻译api id
 
-`baiduKey`: 百度翻译api key
+`baidu_key`: 百度翻译api key
 
-`propertiesFileDir`: 插件的国际化配置目录,相对路径
+`properties_file_dir`: 插件的国际化配置目录,相对路径
 
 `filename`: 文件名的前缀
 
 `defaultfilename`: 默认的文件名
 
-`defaultLang`: 翻译的文本语言
+`default_lang`: 翻译的文本语言
 
-`suportLangs`: 要翻译的文本语言
+`suport_langs`: 要翻译的文本语言
 
 
 
