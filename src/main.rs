@@ -3,16 +3,53 @@ use baidu_trans::config::Config;
 use baidu_trans::lang::Lang;
 use baidu_trans::model::CommonResult;
 use clap::Parser;
-use futures::future;
 use serde::Deserialize;
+use tokio::runtime::Runtime;
 
+use std::borrow::{Borrow, BorrowMut};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tokio::io::AsyncReadExt;
+use tokio::sync::{OnceCell, Semaphore};
 use tokio::time::{self, Instant};
+
+pub static BAIDU_CONFIG: OnceCell<App> = OnceCell::const_new();
+
+struct App {
+    pub config: MyConfig,
+}
+
+impl App {
+    ///创建一个客户端
+    pub fn create_baidu_client(&self) -> Client {
+        Client::new(Config::new(
+            self.config.baiduId.clone(),
+            self.config.baiduKey.clone(),
+        ))
+    }
+}
+
+async fn get_baidu_config() {
+    BAIDU_CONFIG
+        .get_or_init(|| async {
+            let arc_config = read_config().await.expect("读取配置文件失败");
+            let is_dir = directory_exists(&arc_config.propertiesFileDir);
+            if !is_dir {
+                panic!("目录不存在:{:?}", arc_config.propertiesFileDir);
+            }
+            let app = App { config: arc_config };
+            app
+        })
+        .await;
+}
+
+async fn get_app() -> &'static App {
+    BAIDU_CONFIG.get().expect("读取配置失败.")
+}
 
 // 将字符串转换为Lang枚举的函数
 pub fn str_to_lang(lang_str: &str) -> Result<Lang, String> {
@@ -62,6 +99,42 @@ struct MyConfig {
     defaultfilename: String,
     defaultLang: String,
     suportLangs: Vec<String>,
+}
+
+struct TranTask {
+    text: String,
+    to_lang: String,
+}
+
+impl TranTask {
+    ///执行翻译
+    async fn run(&self, key: &str) {
+        let config = get_app().await.config.clone();
+        let dir = config.propertiesFileDir;
+        let filename = config.filename;
+        let r = tr(self.text.as_str(), self.to_lang.as_str()).await;
+        match r {
+            Ok(r) => {
+                let result_comment = r.result.trans_result;
+                match result_comment {
+                    Some(tr_result) => {
+                        if let Some(std) = tr_result.first() {
+                            write_key_value_to_file(
+                                &dir,
+                                format!("{}_{}", &filename, r.to).as_str(),
+                                key,
+                                &std.dst,
+                            );
+                        }
+                    }
+                    None => {
+                        println!("翻译失败:{},语言:{:?}", r.result.error_msg.unwrap(), r.to);
+                    }
+                }
+            }
+            Err(e) => println!("翻译失败:{:?}", e),
+        }
+    }
 }
 
 ///检测文件是否存在
@@ -120,22 +193,20 @@ struct MyResult {
 }
 
 ///翻译函数
-async fn tr(
-    t: &str,
-    from: String,
-    to: String,
-    client: Arc<Client>,
-    delay: time::Duration,
-) -> Result<MyResult, String> {
-    time::sleep(delay).await;
-    let from_lang = str_to_lang(&from).expect(format!("不支持的翻译:{from}").as_str());
+async fn tr(t: &str, to: &str) -> Result<MyResult, String> {
+    let app = get_app().await;
+    let config = &app.config;
+    let default_from = config.defaultLang.clone();
+    let from_lang =
+        str_to_lang(&default_from).expect(format!("不支持的翻译:{default_from}").as_str());
     let to_lang = str_to_lang(&to).expect(format!("不支持转换的翻译:{to}").as_str());
+    let client = app.create_baidu_client();
     client.lang(from_lang, to_lang);
     let resp = client.translate(t).await;
     match resp {
         Ok(e) => Ok(MyResult {
             txt: t.to_string(),
-            to: to,
+            to: to.to_string(),
             result: e,
         }),
         Err(er) => Err(format!("翻译出错:{:?}", er)),
@@ -144,67 +215,28 @@ async fn tr(
 
 ///开始批量翻译
 async fn process_tr_task(tran_txt: &str, key: &str) {
-    match read_config().await {
-        Ok(config) => {
-            let arc_config = Arc::new(config);
-            let filename = arc_config.filename.clone();
-            let default_filename = arc_config.defaultfilename.clone();
-            let dir = arc_config.propertiesFileDir.clone();
-            //检测目录是否存在
-            let is_dir = directory_exists(&arc_config.propertiesFileDir);
-            if !is_dir {
-                panic!("目录不存在:{:?}", arc_config.propertiesFileDir);
-            }
+    let qps = 1;
+    let interval = Duration::from_secs(1) / qps as u32;
+    let semaphore = Arc::new(Semaphore::new(qps));
+    let app = get_app().await;
+    let app_config = app.config.clone();
+    let langs = app_config.suportLangs;
+    let dir = app_config.propertiesFileDir;
+    let filename = app_config.filename;
+    let defualt_filename = filename.clone();
 
-            let clinet = Arc::new(Client::new(Config::new(
-                arc_config.baiduId.clone(),
-                arc_config.baiduKey.clone(),
-            )));
-            let default_lang_str = arc_config.defaultLang.clone();
-            let tr_futures =
-                arc_config
-                    .suportLangs
-                    .clone()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, lang)| {
-                        tr(
-                            tran_txt,
-                            default_lang_str.clone(),
-                            lang.clone(),
-                            Arc::clone(&clinet),
-                            time::Duration::from_secs(2 * index as u64),
-                        )
-                    });
-            let result_list = future::join_all(tr_futures).await;
-            for item in result_list {
-                match item {
-                    Ok(r) => {
-                        let result_comment = r.result.trans_result;
-                        match result_comment {
-                            Some(tr_result) => {
-                                if let Some(std) = tr_result.first() {
-                                    write_key_value_to_file(
-                                        &dir,
-                                        format!("{}_{}", &filename, r.to).as_str(),
-                                        key,
-                                        &std.dst,
-                                    )
-                                }
-                            }
-                            None => {
-                                println!("翻译失败:{},语言:{:?}", r.result.error_msg.unwrap(), r.to)
-                            }
-                        }
-                    }
-                    Err(e) => println!("翻译失败:{:?}", e),
-                }
-            }
-
-            write_key_value_to_file(&dir, &default_filename, key, tran_txt);
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        for to_lang in langs {
+            let task = TranTask {
+                text: tran_txt.clone().to_string(),
+                to_lang: to_lang,
+            };
+            task.run(key).await;
         }
-        Err(_) => panic!("获取配置失败"),
-    }
+    });
+
+    write_key_value_to_file(&dir, &defualt_filename, key, tran_txt);
 }
 
 fn write_key_value_to_file(dir: &str, file_name: &str, key: &str, value: &str) {
@@ -238,7 +270,7 @@ fn write_key_value_to_file(dir: &str, file_name: &str, key: &str, value: &str) {
 }
 
 #[derive(Debug, Parser)]
-#[command(version,about,long_about=None)]
+#[command(version, about, long_about = None)]
 struct MyArgs {
     /// 要执行的操作
     method: String,
@@ -264,6 +296,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         init();
     }
     if method == "tran" {
+        get_baidu_config().await;
         let tran = args.tran.expect("请输入要翻译的词");
         let key = args.key.expect("请输入建议对的键");
         //翻译的文本

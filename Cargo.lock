@@ -296,11 +296,12 @@ dependencies = [
 
 [[package]]
 name = "dd_tran_tool"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "baidu_trans",
  "clap 4.5.2",
  "futures",
+ "lazy_static",
  "serde",
  "serde_json",
  "structopt",
